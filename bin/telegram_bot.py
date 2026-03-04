@@ -3,6 +3,8 @@
 Telegram bot for zgate-edge-tunnel build bot.
 Commands: /version, /latest, /build, /build_now, /status, /clean_sdk, /clean_tunnel, /clean_all.
 Token from .env TELEGRAM_TOKEN or env TELEGRAM_TOKEN.
+
+Copyright (c) eCloudseal Inc.  All rights reserved.  Author: Lai Hou Chang (James Lai)
 """
 import json
 import os

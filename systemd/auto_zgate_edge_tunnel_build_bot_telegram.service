@@ -1,3 +1,4 @@
+# Copyright (c) eCloudseal Inc.  All rights reserved.  Author: Lai Hou Chang (James Lai)
 [Unit]
 Description=zgate-edge-tunnel build bot Telegram bot
 After=network-online.target

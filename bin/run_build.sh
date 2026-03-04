@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Run full build: zgate-sdk-c-builder then zgate-tunnel-sdk-c-builder.
 # Expects: BOT_ROOT, state/building.lock created by caller; updates state/last_build.json on success.
+# Copyright (c) eCloudseal Inc.  All rights reserved.  Author: Lai Hou Chang (James Lai)
 set -euo pipefail
 BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BOT_ROOT="$(cd "${BIN_DIR}/.." && pwd)"

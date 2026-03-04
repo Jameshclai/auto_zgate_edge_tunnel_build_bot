@@ -1,0 +1,47 @@
+================================================================================
+  auto_zgate_edge_tunnel_build_bot - Copyright and Legal Notice
+================================================================================
+
+Copyright (c) eCloudseal Inc.  All rights reserved.
+
+--------------------------------------------------------------------------------
+  Developer / Author
+--------------------------------------------------------------------------------
+  Lai Hou Chang (James Lai)
+
+--------------------------------------------------------------------------------
+  Description
+--------------------------------------------------------------------------------
+  This software is an automation bot that monitors OpenZiti tunnel SDK
+  releases, triggers builds of zgate-edge-tunnel via zgate-sdk-c-builder and
+  zgate-tunnel-sdk-c-builder, and provides Telegram Bot integration for
+  status queries, manual build triggers, and artifact download. It is
+  developed and maintained by eCloudseal Inc.
+
+--------------------------------------------------------------------------------
+  Rights and Restrictions
+--------------------------------------------------------------------------------
+  All rights reserved. No part of this software may be reproduced,
+  distributed, or transmitted in any form or by any means without the prior
+  written permission of eCloudseal Inc., except as permitted by applicable
+  law or as expressly authorized in writing by eCloudseal Inc.
+
+  This software is provided "as is" without warranty of any kind, express
+  or implied. In no event shall eCloudseal Inc. or its contributors be
+  liable for any direct, indirect, incidental, special, exemplary, or
+  consequential damages.
+
+--------------------------------------------------------------------------------
+  Trademarks
+--------------------------------------------------------------------------------
+  eCloudseal and the eCloudseal logo are trademarks of eCloudseal Inc.
+  Other product and company names mentioned herein may be trademarks
+  of their respective owners.
+
+--------------------------------------------------------------------------------
+  Contact
+--------------------------------------------------------------------------------
+  eCloudseal Inc.
+  https://www.ecloudseal.com
+
+================================================================================

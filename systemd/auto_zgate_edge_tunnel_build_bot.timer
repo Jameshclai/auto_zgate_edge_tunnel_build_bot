@@ -1,3 +1,4 @@
+# Copyright (c) eCloudseal Inc.  All rights reserved.  Author: Lai Hou Chang (James Lai)
 [Unit]
 Description=Run zgate-edge-tunnel build bot check every minute
 

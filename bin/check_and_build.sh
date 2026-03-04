@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Check OpenZiti tunnel latest version and artifact existence; trigger run_build.sh if needed.
 # Designed to run every minute (e.g. via systemd timer).
+# Copyright (c) eCloudseal Inc.  All rights reserved.  Author: Lai Hou Chang (James Lai)
 set -euo pipefail
 BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BOT_ROOT="$(cd "${BIN_DIR}/.." && pwd)"

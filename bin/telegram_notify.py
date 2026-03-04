@@ -4,6 +4,8 @@ Send one Telegram message. Used by run_build.sh to report build steps.
 Reads TELEGRAM_TOKEN from .env, BUILD_CHAT_ID from env.
 Usage: telegram_notify.py "message"   or   echo "message" | telegram_notify.py
 If BUILD_CHAT_ID is not set, exits 0 without sending (e.g. timer-triggered build).
+
+Copyright (c) eCloudseal Inc.  All rights reserved.  Author: Lai Hou Chang (James Lai)
 """
 import json
 import os

@@ -2,6 +2,8 @@
 """
 建置完成後將 latest_version/<ver>/ 打包為 tar.gz，並上傳至觸發建置的 Telegram 對話（sendDocument）。
 未設定 BUILD_CHAT_ID 時僅打包不上傳（例如由 timer 觸發的建置）。
+
+Copyright (c) eCloudseal Inc.  All rights reserved.  Author: Lai Hou Chang (James Lai)
 """
 import os
 import sys
