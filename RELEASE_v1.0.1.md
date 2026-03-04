@@ -1,6 +1,6 @@
 # Release 1.0.1
 
-**auto_zgate_edge_tunnel_build_bot** 1.0.1：首個正式版本，提供定時檢查、Telegram Bot 整合、手動建置與產物上傳。
+**auto_zgate_edge_tunnel_build_bot** 1.0.1：首個正式版本，提供定時檢查、Telegram Bot 整合、手動建置與產物上傳；建置步驟 2 即時回報、以 builder 的 latest_version 為準判定成功。
 
 ---
 
@@ -11,6 +11,11 @@
 - **建置流程**：依序執行 zgate-sdk-c-builder、zgate-tunnel-sdk-c-builder；若本機無兩專案則從 GitHub clone；每步驟推送到觸發建置的 Telegram 對話。
 - **產物**：建置成功後複製至 `latest_version/<版本>/`（linux/windows/macos 分平台），並打包 tar.gz 上傳至該對話供下載。
 - **版權**：COPYRIGHT 與各程式版權說明（eCloudseal Inc., Lai Hou Chang (James Lai)）。
+
+## 修改說明（1.0.1 更新）
+
+- **步驟 2/4 即時回報**：tunnel 建置改為背景執行；每 1 分鐘、之後每 2 分鐘檢查 **zgate-tunnel-sdk-c-builder/latest_version** 與 output 已產出平台，並推送「步驟 2/4 進行中：版本 x.x.x：linux/x64, windows, …」至 Telegram，避免畫面卡在步驟 2。
+- **步驟 3/4 以 builder latest_version 為準**：成功條件改為檢查 **zgate-tunnel-sdk-c-builder/latest_version/<版本>/** 是否有所選平台產物；若有則直接自該目錄複製至 bot 的 latest_version，再寫入 state、打包上傳。若 builder 的 latest_version 無符合產物，則沿用 output/ 偵測與複製邏輯。
 
 ## 需求
 
