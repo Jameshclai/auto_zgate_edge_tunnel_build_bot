@@ -143,6 +143,28 @@ def _clear_await_sudo(chat_id):
     _write_await_sudo(data)
 
 
+def _is_build_really_running():
+    """若 run_build.sh 未在執行則視為殘留鎖定，移除 building.lock 並回傳 False；有在執行則回傳 True。"""
+    try:
+        r = subprocess.run(
+            ["pgrep", "-f", "run_build.sh"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            cwd=str(BOT_ROOT),
+        )
+        if r.returncode == 0 and (r.stdout or "").strip():
+            return True
+    except Exception:
+        pass
+    if LOCK_FILE.exists():
+        try:
+            LOCK_FILE.unlink()
+        except Exception:
+            pass
+    return False
+
+
 def handle_version(chat_id):
     try:
         latest = get_latest_version()
@@ -277,7 +299,7 @@ def _clean_builder_output_work(builder_root: Path, label: str):
 
 
 def handle_clean_sdk(chat_id):
-    if LOCK_FILE.exists():
+    if LOCK_FILE.exists() and _is_build_really_running():
         send_message(chat_id, "建置進行中，無法清理。請等建置完成後再試。")
         return
     sdk_root, _ = _builder_roots()
@@ -286,7 +308,7 @@ def handle_clean_sdk(chat_id):
 
 
 def handle_clean_tunnel(chat_id):
-    if LOCK_FILE.exists():
+    if LOCK_FILE.exists() and _is_build_really_running():
         send_message(chat_id, "建置進行中，無法清理。請等建置完成後再試。")
         return
     _, tunnel_root = _builder_roots()
@@ -308,9 +330,12 @@ def _do_clean_all(chat_id):
 
 def handle_clean_all(chat_id):
     """收到 /clean_all 時不立即執行，僅寫入等候確認狀態並送出確認訊息；實際刪除需使用者回覆確認後才執行。"""
-    if LOCK_FILE.exists():
+    had_lock = LOCK_FILE.exists()
+    if had_lock and _is_build_really_running():
         send_message(chat_id, "建置進行中，無法清理。請等建置完成後再試。")
         return
+    if had_lock:
+        send_message(chat_id, "已清除殘留的建置鎖定檔，繼續清理流程。")
     from datetime import datetime, timezone
     # 僅詢問確認，絕不在此處執行刪除
     _write_await_sudo({
@@ -455,9 +480,14 @@ def main():
                             reply = (text or "").strip().lower()
                             _clear_await_sudo(chat_id)
                             if reply in ("確認", "是", "yes", "y"):
-                                if LOCK_FILE.exists():
+                                if LOCK_FILE.exists() and _is_build_really_running():
                                     send_message(chat_id, "建置進行中，無法清理。請等建置完成後再試。")
                                 else:
+                                    if LOCK_FILE.exists():
+                                        try:
+                                            LOCK_FILE.unlink()
+                                        except Exception:
+                                            pass
                                     send_message(chat_id, "🗑 清理全部：開始刪除兩專案目錄…")
                                     _do_clean_all(chat_id)
                             elif reply in ("取消", "否", "no", "n", "cancel"):
@@ -478,7 +508,7 @@ def main():
                                 sudo_pass = ""
                             else:
                                 sudo_pass = text
-                            if LOCK_FILE.exists():
+                            if LOCK_FILE.exists() and _is_build_really_running():
                                 send_message(chat_id, "建置進行中，請稍後再試。")
                             else:
                                 _start_build_with_sudo(chat_id, sudo_pass if sudo_pass else None, platform=platform)

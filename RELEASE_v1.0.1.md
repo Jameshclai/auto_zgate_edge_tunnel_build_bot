@@ -16,6 +16,7 @@
 
 - **步驟 2/4 即時回報**：tunnel 建置改為背景執行；每 1 分鐘、之後每 2 分鐘檢查 **zgate-tunnel-sdk-c-builder/latest_version** 與 output 已產出平台，並推送「步驟 2/4 進行中：版本 x.x.x：linux/x64, windows, …」至 Telegram，避免畫面卡在步驟 2。
 - **步驟 3/4 以 builder latest_version 為準**：成功條件改為檢查 **zgate-tunnel-sdk-c-builder/latest_version/<版本>/** 是否有所選平台產物；若有則直接自該目錄複製至 bot 的 latest_version，再寫入 state、打包上傳。若 builder 的 latest_version 無符合產物，則沿用 output/ 偵測與複製邏輯。
+- **殘留建置鎖定處理**：僅在確實有 run_build.sh 執行時才阻擋 `/clean_all`、`/clean_sdk`、`/clean_tunnel`；若 `building.lock` 存在但無建置程序（建置中斷或手動結束），自動清除鎖定並允許清理，必要時提示「已清除殘留的建置鎖定檔」。
 
 ## 需求
 
