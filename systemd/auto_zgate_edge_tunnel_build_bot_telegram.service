@@ -1,0 +1,16 @@
+[Unit]
+Description=zgate-edge-tunnel build bot Telegram bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/zgate/auto_zgate_edge_tunnel_build_bot
+EnvironmentFile=/home/zgate/auto_zgate_edge_tunnel_build_bot/.env
+ExecStart=/usr/bin/python3 /home/zgate/auto_zgate_edge_tunnel_build_bot/bin/telegram_bot.py
+Restart=on-failure
+RestartSec=10
+User=zgate
+
+[Install]
+WantedBy=multi-user.target

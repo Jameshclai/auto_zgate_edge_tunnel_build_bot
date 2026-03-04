@@ -1,0 +1,14 @@
+[Unit]
+Description=zgate-edge-tunnel build bot check (oneshot)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/zgate/auto_zgate_edge_tunnel_build_bot
+EnvironmentFile=/home/zgate/auto_zgate_edge_tunnel_build_bot/.env
+ExecStart=/home/zgate/auto_zgate_edge_tunnel_build_bot/bin/check_and_build.sh
+User=zgate
+
+[Install]
+WantedBy=multi-user.target
