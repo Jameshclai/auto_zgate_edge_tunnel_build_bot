@@ -19,9 +19,12 @@ auto_zgate_edge_tunnel_build_bot/
 ├── state/
 │   ├── last_build.json  # 上次建置版本與產出路徑
 │   └── build.log
+├── latest_version/     # 建置成功後複製的 Linux/Windows 二進位（按版本分子目錄）
 ├── bin/
 │   ├── check_and_build.sh   # 每分鐘檢查、必要時觸發建置
-│   ├── run_build.sh         # 依序執行 SDK + Tunnel build.sh
+│   ├── run_build.sh         # 依序執行 SDK + Tunnel build.sh（可依 BUILD_CHAT_ID 推送步驟）
+│   ├── pack_and_upload_telegram.py  # 建置完成後打包 tar.gz 並上傳至觸發建置的 Telegram 對話
+│   ├── telegram_notify.py   # 建置步驟通知（由 run_build.sh 呼叫）
 │   └── telegram_bot.py     # Telegram 指令：/version、/build、/status
 └── systemd/
     ├── auto_zgate_edge_tunnel_build_bot.service      # oneshot 檢查
@@ -51,8 +54,11 @@ auto_zgate_edge_tunnel_build_bot/
 | 指令 | 說明 |
 |------|------|
 | `/version` 或 `/latest` | 查詢 OpenZiti tunnel 目前最新版本、上次建置版本與二進位是否存在 |
-| `/build` 或 `/build_now` | 手動觸發一次完整建置（背景執行） |
+| `/build` 或 `/build_now` | 手動觸發建置；若本機尚無兩專案則會從 GitHub 下載（並回報下載成功/失敗），Bot 會先詢問 sudo 密碼（回覆「跳過」或「無」可略過），再開始建置並推送每個步驟；建置成功後會自動將產物打包為 tar.gz 並上傳至該對話，操作者可從 Telegram 下載 |
 | `/status` | 目前狀態：最新版、上次建置、是否建置中、Linux/Windows 產出是否存在 |
+| `/clean_sdk` | 刪除 zgate-sdk-c-builder 的 output 與 work 目錄 |
+| `/clean_tunnel` | 刪除 zgate-tunnel-sdk-c-builder 的 output 與 work 目錄 |
+| `/clean_all` | 刪除 zgate-sdk-c-builder 與 zgate-tunnel-sdk-c-builder 兩專案整個目錄（下次 /build 會從 GitHub 重新下載） |
 | `/start` 或 `/help` | 顯示指令說明 |
 
 ## systemd 服務（每 1 分鐘檢查）

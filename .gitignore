@@ -1,5 +1,6 @@
 .env
 state/
+latest_version/
 *.log
 *.pyc
 __pycache__/
