@@ -130,7 +130,7 @@ sudo ./bin/fix_state_permissions.sh
 | 指令 | 說明 |
 |------|------|
 | `/version`、`/latest` | 查詢 OpenZiti tunnel 目前最新版本、上次建置版本與時間、Linux/Windows 二進位是否存在。 |
-| `/build` | 手動觸發建置。Bot 會**先詢問建置平台**（點選按鈕或輸入 `all` / `linux` / `windows` / `macos`）後開始建置；sudo 使用安裝時寫入 `.env` 的 `SUDO_PASS`（若有）。若本機尚無兩 builder 專案會先從 GitHub 下載並回報結果。建置過程中每步驟推送到此對話；完成後自動打包 tar.gz 並上傳，可從對話下載。 |
+| `/build` | 手動觸發建置。Bot 會**先詢問建置平台**（點選按鈕或輸入 `all` / `linux` / `windows` / `macos`）後開始建置；sudo 使用安裝時寫入 `.env` 的 `SUDO_PASS`（若有）。若本機尚無兩 builder 專案會先從 GitHub 下載並回報結果。**依賴安裝與編譯進度每 1 分鐘推送到此對話**（步驟 1：vcpkg/編譯進度；步驟 2：已產出平台）；完成後自動打包 tar.gz 並上傳，可從對話下載。 |
 | `/stop_build` | 中斷目前進行中的建置（結束 run_build.sh 並清除鎖定）。 |
 | `/status` | 目前狀態：最新版、上次建置版本、是否建置中、Linux/Windows 產出是否存在，以及 `latest_version/` 目錄樹。 |
 | `/clean_sdk` | 刪除 **zgate-sdk-c-builder** 的 `output` 與 `work` 目錄。 |

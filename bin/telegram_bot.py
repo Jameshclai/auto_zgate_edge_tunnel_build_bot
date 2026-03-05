@@ -8,6 +8,7 @@ Copyright (c) eCloudseal Inc.  All rights reserved.  Author: Lai Hou Chang (Jame
 """
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -148,8 +149,26 @@ def _is_build_really_running():
     return False
 
 
+def _run_ps_grep():
+    """執行 ps 檢查是否仍有 run_build 或 builder 相關程序，回傳 (returncode, stdout 前 800 字)。"""
+    try:
+        r = subprocess.run(
+            ["ps", "aux"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            cwd=str(BOT_ROOT),
+        )
+        if r.returncode != 0:
+            return r.returncode, (r.stderr or "")[:800]
+        lines = [line for line in (r.stdout or "").splitlines() if ("run_build" in line or "zgate-sdk-c-builder" in line or "zgate-tunnel-sdk-c-builder" in line) and "grep" not in line]
+        return 0, "\n".join(lines)[:800] if lines else "（無相關程序）"
+    except Exception as e:
+        return -1, str(e)[:400]
+
+
 def handle_stop_build(chat_id):
-    """中斷目前建置：結束 run_build.sh 程序並移除鎖定。"""
+    """中斷目前建置：結束所有相關程序、移除鎖定與建置中產物（output/work），以 ps 確認並詳細回報。"""
     if not LOCK_FILE.exists():
         send_message(chat_id, "目前沒有進行中的建置。")
         return
@@ -160,22 +179,52 @@ def handle_stop_build(chat_id):
             pass
         send_message(chat_id, "建置已結束或無執行中的程序，已清除鎖定。")
         return
+
+    send_message(chat_id, "🛑 正在中斷建置…")
+
+    # 1) 結束 run_build.sh 與 builder 內建置程序
     try:
-        subprocess.run(
-            ["pkill", "-f", "run_build.sh"],
-            capture_output=True,
-            timeout=5,
-            cwd=str(BOT_ROOT),
-        )
+        subprocess.run(["pkill", "-f", "run_build.sh"], capture_output=True, timeout=5, cwd=str(BOT_ROOT))
+        subprocess.run(["pkill", "-f", "zgate-sdk-c-builder/build.sh"], capture_output=True, timeout=5, cwd=str(BOT_ROOT))
+        subprocess.run(["pkill", "-f", "zgate-tunnel-sdk-c-builder/build.sh"], capture_output=True, timeout=5, cwd=str(BOT_ROOT))
     except Exception as e:
-        send_message(chat_id, f"中斷建置時發生錯誤：{e}")
+        send_message(chat_id, f"❌ 發送中斷信號時發生錯誤：{e}")
         return
+    send_message(chat_id, "• 已對 run_build.sh 與兩 builder 的 build.sh 發送終止信號。")
+
+    # 2) 短暫等待後以 ps 確認
+    import time
+    time.sleep(2)
+    rc, ps_out = _run_ps_grep()
+    if rc == 0:
+        send_message(chat_id, f"【ps 確認】\n{ps_out}")
+    else:
+        send_message(chat_id, f"【ps 確認】執行異常（code={rc}）：{ps_out}")
+
+    # 3) 移除鎖定
     if LOCK_FILE.exists():
         try:
             LOCK_FILE.unlink()
-        except Exception:
-            pass
-    send_message(chat_id, "已發送中斷信號，建置已停止。可重新使用 /build 觸發新建置。")
+            send_message(chat_id, "• 已移除 building.lock。")
+        except Exception as e:
+            send_message(chat_id, f"• 移除 building.lock 失敗：{e}")
+    else:
+        send_message(chat_id, "• building.lock 已不存在。")
+
+    # 4) 移除建置到一半的 output、work 目錄
+    sdk_root, tunnel_root = _builder_roots()
+    ok1, msg1 = _clean_builder_output_work(sdk_root, "zgate-sdk-c-builder")
+    send_message(chat_id, f"• {msg1}")
+    ok2, msg2 = _clean_builder_output_work(tunnel_root, "zgate-tunnel-sdk-c-builder")
+    send_message(chat_id, f"• {msg2}")
+
+    # 5) 再次 ps 確認無殘留程序
+    time.sleep(1)
+    rc2, ps_out2 = _run_ps_grep()
+    if "無相關程序" in ps_out2 or (rc2 == 0 and not ps_out2.strip().splitlines()):
+        send_message(chat_id, "✅ 建置已完全中斷並清理，所有相關程序已結束，建置中產物已移除。可重新使用 /build 觸發新建置。")
+    else:
+        send_message(chat_id, f"⚠️ 再次 ps 檢查仍可能有殘留程序，請手動確認：\n{ps_out2}\n\n鎖定與 output/work 已清理，可重新 /build。")
 
 
 def handle_version(chat_id):
@@ -215,11 +264,15 @@ def _start_build(chat_id, platform="all"):
             env=env,
             start_new_session=True,
         )
-    plat_label = {"all": "全部平台", "linux": "Linux", "windows": "Windows", "macos": "macOS"}.get(platform, platform)
+    build_start_msg = {
+        "all": "已開始建置 ZGate Edge Tunnel（全部平台：Linux x64/arm64/arm、Windows、macOS x64/arm64）。每個步驟與依賴安裝／各平台建置進度將推送到此對話。",
+        "linux": "已開始建置 ZGate Edge Tunnel（Linux：x64、arm64、arm）。每個步驟與編譯進度將推送到此對話。",
+        "windows": "已開始建置 ZGate Edge Tunnel（Windows）。每個步驟與編譯進度將推送到此對話。",
+        "macos": "已開始建置 ZGate Edge Tunnel（macOS：x64、arm64）。每個步驟與編譯進度將推送到此對話。",
+    }.get(platform, f"已開始建置 ZGate Edge Tunnel（{platform}）。每個步驟會推送到此對話。")
     send_message(
         chat_id,
-        f"已開始建置（{plat_label}），每個步驟會推送到此對話。\n"
-        "可稍後用 /status 或 /version 查詢結果。",
+        f"{build_start_msg}\n可稍後用 /status 或 /version 查詢結果。",
     )
 
 
@@ -379,20 +432,132 @@ def _format_latest_version_tree(version_dir):
         return ""
     ver_name = root.name
     lines = [f"【已複製目錄】latest_version/{ver_name}/"]
-    for platform in ("linux", "windows"):
+    for platform in ("linux", "windows", "macos"):
         p = root / platform
         if not p.is_dir():
             continue
         lines.append(f"  {platform}/")
         for item in sorted(p.iterdir()):
             if item.is_dir():
-                # linux 下為平台子目錄（x64、arm64、arm）
                 for f in sorted(item.iterdir()):
                     if f.is_file():
                         lines.append(f"    {item.name}/{f.name}")
             elif item.is_file():
                 lines.append(f"    • {item.name}")
     return "\n".join(lines) if len(lines) > 1 else ""
+
+
+def _status_packages_downloaded():
+    """回傳兩行字串：zgate-sdk-c-builder、zgate-tunnel-sdk-c-builder 是否已下載。"""
+    sdk_root, tunnel_root = _builder_roots()
+    sdk_ok = sdk_root.is_dir() and (sdk_root / "build.sh").exists()
+    tunnel_ok = tunnel_root.is_dir() and (tunnel_root / "build.sh").exists()
+    return (
+        f"• zgate-sdk-c-builder：{'已下載' if sdk_ok else '未下載'}\n"
+        f"• zgate-tunnel-sdk-c-builder：{'已下載' if tunnel_ok else '未下載'}"
+    )
+
+
+def _status_build_progress():
+    """若正在建置，從 build.log 與 builder 目錄推斷目前步驟與各平台狀態；否則回傳空字串。"""
+    if not LOCK_FILE.exists() or not _is_build_really_running():
+        return ""
+    log_file = BOT_ROOT / "state" / "build.log"
+    _, tunnel_root = _builder_roots()
+    tb_latest = tunnel_root / "latest_version"
+    tb_output = tunnel_root / "output"
+
+    step = ""
+    detail = ""
+    try:
+        if log_file.exists():
+            tail = log_file.read_text(encoding="utf-8", errors="ignore").strip()
+            last_lines = tail.split("\n")[-100:] if "\n" in tail else [tail]
+            for line in reversed(last_lines):
+                if "Calling" in line and "build.sh" in line:
+                    if "zgate-tunnel-sdk-c" in line or "zgate-tunnel-sdk-c-builder" in line:
+                        step = "2"
+                        break
+                    if "zgate-sdk-c-builder" in line or "zgate-sdk-c" in line:
+                        step = "1"
+                        break
+        if step == "1":
+            for line in reversed((log_file.read_text(encoding="utf-8", errors="ignore").split("\n")[-80:])):
+                m = re.search(r"Installing\s+(\d+)/(\d+)\s+(\S+)", line)
+                if m:
+                    detail = f"vcpkg 依賴安裝中：{m.group(1)}/{m.group(2)} {m.group(3)[:40]}"
+                    break
+                m = re.search(r"Building\s+(\S+)", line)
+                if m:
+                    detail = f"編譯中：{m.group(1)[:50]}"
+                    break
+            if not detail:
+                detail = "編譯 zgate-sdk-c 與 vcpkg 依賴中…"
+        elif step == "2":
+            linux_archs, windows_ok, macos_archs = [], False, []
+            if tb_latest.is_dir():
+                for vdir in tb_latest.iterdir():
+                    if not vdir.is_dir():
+                        continue
+                    v = vdir
+                    if (v / "linux/x64/zgate-edge-tunnel").exists():
+                        linux_archs.append("x64")
+                    if (v / "linux/arm64/zgate-edge-tunnel").exists():
+                        linux_archs.append("arm64")
+                    if (v / "linux/arm/zgate-edge-tunnel").exists():
+                        linux_archs.append("arm")
+                    if (v / "windows/zgate-edge-tunnel.exe").exists():
+                        windows_ok = True
+                    if (v / "macos/x64/zgate-edge-tunnel").exists():
+                        macos_archs.append("x64")
+                    if (v / "macos/arm64/zgate-edge-tunnel").exists():
+                        macos_archs.append("arm64")
+                    if linux_archs or windows_ok or macos_archs:
+                        break
+            if not linux_archs and not windows_ok and not macos_archs and tb_output.is_dir():
+                for out_ver in tb_output.glob("zgate-tunnel-sdk-c-*"):
+                    if not out_ver.is_dir():
+                        continue
+                    o = out_ver
+                    if (o / "build-ci-linux-x64/programs/zgate-edge-tunnel/Release/zgate-edge-tunnel").exists():
+                        linux_archs.append("x64")
+                    if (o / "build-ci-linux-arm64/programs/zgate-edge-tunnel/Release/zgate-edge-tunnel").exists():
+                        linux_archs.append("arm64")
+                    if (o / "build-ci-linux-arm/programs/zgate-edge-tunnel/Release/zgate-edge-tunnel").exists():
+                        linux_archs.append("arm")
+                    if (o / "build-ci-windows-x64-mingw/programs/zgate-edge-tunnel/Release/zgate-edge-tunnel.exe").exists():
+                        windows_ok = True
+                    if (o / "build-ci-macOS-x64/programs/zgate-edge-tunnel/Release/zgate-edge-tunnel").exists():
+                        macos_archs.append("x64")
+                    if (o / "build-ci-macOS-arm64/programs/zgate-edge-tunnel/Release/zgate-edge-tunnel").exists():
+                        macos_archs.append("arm64")
+                    if linux_archs or windows_ok or macos_archs:
+                        break
+            done_parts = []
+            if linux_archs:
+                done_parts.append(f"Linux ({','.join(linux_archs)})")
+            if windows_ok:
+                done_parts.append("Windows")
+            if macos_archs:
+                done_parts.append(f"macOS ({','.join(macos_archs)})")
+            building_parts = []
+            if not linux_archs or len(linux_archs) < 3:
+                building_parts.append("Linux (x64、arm64、arm)")
+            if not windows_ok:
+                building_parts.append("Windows")
+            if not macos_archs or len(macos_archs) < 2:
+                building_parts.append("macOS (x64、arm64)")
+            if done_parts:
+                detail = f"【已建置完成】{'、'.join(done_parts)}"
+                if building_parts:
+                    detail += f"；【尚在建置】{'、'.join(building_parts)}"
+            else:
+                detail = "【尚在建置】Linux (x64、arm64、arm)、Windows、macOS (x64、arm64)，尚未產出二進位。"
+    except Exception as e:
+        detail = f"（無法讀取進度：{e}）"
+    if not step:
+        return "【建置中】目前步驟辨識中…（請稍後再查）"
+    return f"【步驟 {step}/4 進行中】{detail}"
 
 
 def handle_status(chat_id):
@@ -402,22 +567,41 @@ def handle_status(chat_id):
         latest = "取得失敗"
     state = read_state()
     last_ver = state.get("last_version", "—")
-    building = "是" if LOCK_FILE.exists() else "否"
+    last_time = state.get("last_build_time", "—")
+    building = "是" if (LOCK_FILE.exists() and _is_build_really_running()) else "否"
     linux_path = state.get("linux_path", "")
     win_path = state.get("windows_path", "")
     linux_ok = "是" if (linux_path and Path(linux_path).exists()) else "否"
     win_ok = "是" if (win_path and Path(win_path).exists()) else "否"
-    msg = (
-        f"最新版本: {latest}\n"
-        f"上次建置版本: {last_ver}\n"
-        f"正在建置中: {building}\n"
-        f"Linux 二進位: {linux_ok}\n"
-        f"Windows 二進位: {win_ok}"
-    )
+
+    blocks = [
+        "📋 目前狀態",
+        "",
+        "【套件下載狀態】",
+        _status_packages_downloaded(),
+        "",
+        "【建置狀態】",
+        f"• 正在建置中：{building}",
+    ]
+    if building == "是":
+        progress = _status_build_progress()
+        if progress:
+            blocks.append(progress)
+    blocks.extend([
+        "",
+        "【版本與產出】",
+        f"• OpenZiti tunnel 最新版本：{latest}",
+        f"• 上次建置版本：{last_ver}",
+        f"• 上次建置時間：{last_time}",
+        f"• Linux 二進位存在：{linux_ok}",
+        f"• Windows 二進位存在：{win_ok}",
+    ])
     version_dir = state.get("latest_version_dir", "")
     tree = _format_latest_version_tree(version_dir)
     if tree:
-        msg = msg + "\n\n" + "```\n" + tree + "\n```"
+        blocks.extend(["", "【latest_version 目錄】", "```", tree, "```"])
+    msg = "\n".join(blocks)
+    if tree:
         send_message(chat_id, msg, parse_mode="Markdown")
     else:
         send_message(chat_id, msg)
