@@ -22,9 +22,11 @@ echo ">>> 安裝系統套件 (curl, jq, python3)..."
 apt-get update -qq
 apt-get install -y curl jq python3
 
-# Directories and permissions
+# Directories and permissions (state/ and latest_version/ must be writable by RUN_USER for Telegram bot and run_build.sh)
 echo ">>> 建立 state 目錄與腳本權限..."
 mkdir -p "${INSTALL_DIR}/state"
+[[ -d "${INSTALL_DIR}/latest_version" ]] || mkdir -p "${INSTALL_DIR}/latest_version"
+chown -R "${RUN_USER}:${RUN_USER}" "${INSTALL_DIR}/state" "${INSTALL_DIR}/latest_version" 2>/dev/null || true
 chmod +x "${INSTALL_DIR}/bin/check_and_build.sh" "${INSTALL_DIR}/bin/run_build.sh" 2>/dev/null || true
 
 # Interactive .env setup (no default secrets in repo)
