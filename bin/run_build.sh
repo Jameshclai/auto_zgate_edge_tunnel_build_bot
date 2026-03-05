@@ -139,13 +139,14 @@ fi
 notify "📦 步驟 2/4：正在建置 zgate-tunnel-sdk-c（${BUILD_PLATFORM:-all}）…"
 echo "==> Calling ${TUNNEL_BUILDER_ROOT}/build.sh ${TUNNEL_BUILD_ARG}"
 export OUTPUT_DIR="${OUTPUT_DIR:-${TUNNEL_BUILDER_ROOT}/output}"
-# 背景執行 tunnel build，每 2 分鐘依 builder/latest_version 與 output 回報已產出平台
+# 背景執行 tunnel build，每 3 分鐘依 builder/latest_version 與 output 回報已產出平台
 (cd "${TUNNEL_BUILDER_ROOT}" && ./build.sh ${TUNNEL_BUILD_ARG}) &
 TUNNEL_PID=$!
-sleep 60
+REPORT_INTERVAL=180
+sleep "${REPORT_INTERVAL}"
 report_step2_status
 while kill -0 "${TUNNEL_PID}" 2>/dev/null; do
-    sleep 120
+    sleep "${REPORT_INTERVAL}"
     kill -0 "${TUNNEL_PID}" 2>/dev/null || break
     report_step2_status
 done

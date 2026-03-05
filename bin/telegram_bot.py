@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Telegram bot for zgate-edge-tunnel build bot.
-Commands: /version, /latest, /build, /status, /clean_sdk, /clean_tunnel, /clean_all.
+Commands: /version, /latest, /build, /stop_build, /status, /clean_sdk, /clean_tunnel, /clean_all.
 Token from .env TELEGRAM_TOKEN or env TELEGRAM_TOKEN.
 
 Copyright (c) eCloudseal Inc.  All rights reserved.  Author: Lai Hou Chang (James Lai)
@@ -53,11 +53,14 @@ def api(method, timeout_conn=30, **params):
     return out
 
 
-def send_message(chat_id, text, parse_mode=None):
+def send_message(chat_id, text, parse_mode=None, reply_markup=None):
     try:
         params = {"chat_id": chat_id, "text": text}
         if parse_mode:
             params["parse_mode"] = parse_mode
+        if reply_markup is not None:
+            import json as _json
+            params["reply_markup"] = _json.dumps(reply_markup) if isinstance(reply_markup, dict) else reply_markup
         api("sendMessage", **params)
     except Exception as e:
         print(f"send_message to {chat_id} failed: {e}", file=sys.stderr, flush=True)
@@ -145,6 +148,36 @@ def _is_build_really_running():
     return False
 
 
+def handle_stop_build(chat_id):
+    """中斷目前建置：結束 run_build.sh 程序並移除鎖定。"""
+    if not LOCK_FILE.exists():
+        send_message(chat_id, "目前沒有進行中的建置。")
+        return
+    if not _is_build_really_running():
+        try:
+            LOCK_FILE.unlink()
+        except Exception:
+            pass
+        send_message(chat_id, "建置已結束或無執行中的程序，已清除鎖定。")
+        return
+    try:
+        subprocess.run(
+            ["pkill", "-f", "run_build.sh"],
+            capture_output=True,
+            timeout=5,
+            cwd=str(BOT_ROOT),
+        )
+    except Exception as e:
+        send_message(chat_id, f"中斷建置時發生錯誤：{e}")
+        return
+    if LOCK_FILE.exists():
+        try:
+            LOCK_FILE.unlink()
+        except Exception:
+            pass
+    send_message(chat_id, "已發送中斷信號，建置已停止。可重新使用 /build 觸發新建置。")
+
+
 def handle_version(chat_id):
     try:
         latest = get_latest_version()
@@ -191,23 +224,29 @@ def _start_build(chat_id, platform="all"):
 
 
 def handle_build(chat_id):
-    if LOCK_FILE.exists():
-        send_message(chat_id, "建置進行中，請稍後再試。")
+    if LOCK_FILE.exists() and _is_build_really_running():
+        send_message(chat_id, "建置進行中，請稍後再試。可傳送 /stop_build 中斷建置。")
         return
     from datetime import datetime, timezone
-    # 僅詢問建置平台；使用者回覆 all/linux/windows/macos 後直接啟動建置（sudo 由 .env SUDO_PASS 提供）
+    # 詢問建置平台；可點選按鈕或直接輸入 all/linux/windows/macos
     _write_await_sudo({
         **(_read_await_sudo()),
         str(chat_id): {"awaiting": "platform", "since": datetime.now(timezone.utc).isoformat()},
     })
+    keyboard = {
+        "keyboard": [["all", "linux"], ["windows", "macos"]],
+        "one_time_keyboard": True,
+        "resize_keyboard": True,
+    }
     send_message(
         chat_id,
-        "請選擇建置平台：請「回覆此訊息」輸入下列其中一項：\n"
+        "請選擇建置平台（點選下方按鈕或直接輸入）：\n"
         "• all — 全部平台（Linux x64/arm64/arm、macOS、Windows）\n"
         "• linux — 僅 Linux（x64、arm64、arm）\n"
         "• windows — 僅 Windows\n"
         "• macos — 僅 macOS\n"
-        "（約 5 分鐘內未回覆將取消，可重新發送 /build）",
+        "（約 5 分鐘內未選擇將取消，可重新發送 /build）",
+        reply_markup=keyboard,
     )
 
 
@@ -410,6 +449,8 @@ def main():
                     handle_version(chat_id)
                 elif text == "/build":
                     handle_build(chat_id)
+                elif text == "/stop_build":
+                    handle_stop_build(chat_id)
                 elif text == "/status":
                     handle_status(chat_id)
                 elif text == "/clean_sdk":
@@ -424,6 +465,7 @@ def main():
                         "指令：\n"
                         "/version 或 /latest — 查詢最新版本與上次建置\n"
                         "/build — 手動觸發建置（會先詢問平台：all/linux/windows/macos；sudo 使用安裝時設定的 .env）\n"
+                        "/stop_build — 中斷目前進行中的建置\n"
                         "/status — 目前狀態\n"
                         "/clean_sdk — 刪除 zgate-sdk-c-builder 的 output 與 work\n"
                         "/clean_tunnel — 刪除 zgate-tunnel-sdk-c-builder 的 output 與 work\n"
