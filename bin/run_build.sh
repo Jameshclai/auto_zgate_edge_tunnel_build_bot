@@ -8,16 +8,12 @@ BOT_ROOT="$(cd "${BIN_DIR}/.." && pwd)"
 STATE_DIR="${BOT_ROOT}/state"
 LOCK_FILE="${STATE_DIR}/building.lock"
 
-# Preserve Telegram-provided SUDO_PASS (from /build 回覆) so .env does not override
-BUILD_SUDO_PASS="${SUDO_PASS:-}"
-# Load .env if present
+# Load .env if present (SUDO_PASS 於安裝時寫入 .env，供非互動建置使用)
 if [[ -f "${BOT_ROOT}/.env" ]]; then
     set -a
     source "${BOT_ROOT}/.env"
     set +a
 fi
-# Telegram 詢問的密碼優先於 .env
-[[ -n "${BUILD_SUDO_PASS:-}" ]] && export SUDO_PASS="${BUILD_SUDO_PASS}"
 
 SDK_BUILDER_ROOT="${SDK_BUILDER_ROOT:-$(dirname "${BOT_ROOT}")/zgate-sdk-c-builder}"
 TUNNEL_BUILDER_ROOT="${TUNNEL_BUILDER_ROOT:-$(dirname "${BOT_ROOT}")/zgate-tunnel-sdk-c-builder}"

@@ -44,8 +44,10 @@
 
 ```
 auto_zgate_edge_tunnel_build_bot/
-├── .env                    # 設定（TELEGRAM_TOKEN、路徑等）；勿提交版控
+├── .env                    # 設定（TELEGRAM_TOKEN、路徑等）；勿提交版控；一鍵安裝時由 install.sh 互動寫入
 ├── .env.example
+├── install.sh              # 一鍵安裝腳本（Ubuntu 24.04）：互動輸入 Token／sudo 密碼後安裝服務
+├── uninstall.sh            # 反安裝腳本：停止並移除 systemd 服務；可選 --remove-data 清除 state/.env
 ├── .gitignore
 ├── COPYRIGHT               # 版權與法律聲明（eCloudseal Inc.）
 ├── README.md
@@ -53,7 +55,7 @@ auto_zgate_edge_tunnel_build_bot/
 │   ├── last_build.json     # 上次建置版本、產出路徑、latest_version 目錄
 │   ├── build.log           # 建置日誌
 │   ├── building.lock       # 建置中鎖定檔
-│   └── telegram_await_sudo.json  # Bot 等候回覆狀態（平台選擇、sudo、clean_all 確認）
+│   └── telegram_await_sudo.json  # Bot 等候回覆狀態（平台選擇、clean_all 確認）
 ├── latest_version/         # 建置成功後複製的產物（按版本與平台分子目錄）
 │   └── <版本>/
 │       ├── linux/x64|arm64|arm/
@@ -73,7 +75,32 @@ auto_zgate_edge_tunnel_build_bot/
 
 ---
 
-## 設定
+## 一鍵安裝（Ubuntu 24.04）
+
+從 GitHub 下載後執行安裝腳本，**依提示輸入** Telegram 機器人名稱（選填）、Bot Token（必填）、預設 sudo 密碼（選填，例如 AWS EC2 以 `sudo -s` 提權建置時使用）。不會在專案內留下預設 Token 或密碼，降低資安風險。
+
+```bash
+git clone https://github.com/Jameshclai/auto_zgate_edge_tunnel_build_bot.git
+cd auto_zgate_edge_tunnel_build_bot
+sudo ./install.sh
+```
+
+安裝過程會：安裝系統套件（curl、jq、python3）、建立 `.env`（由您輸入的設定寫入）、安裝並啟用 systemd timer 與 Telegram 服務。若已存在 `.env`，可選擇保留或覆寫並重新輸入。
+
+### 反安裝
+
+執行反安裝腳本可停止並移除 systemd 服務與 unit 檔；可選清除本機資料（state、建置產物、.env）。
+
+```bash
+sudo ./uninstall.sh              # 僅移除服務，保留專案目錄與 state/.env（可再 install）
+sudo ./uninstall.sh --remove-data # 並刪除 state/、latest_version/、.env（不留建置產物與機密）
+```
+
+專案目錄不會被刪除；若要完全移除請手動 `rm -rf` 該目錄。
+
+---
+
+## 設定（手動安裝時）
 
 1. **複製環境範本並編輯**：
    ```bash
@@ -81,10 +108,11 @@ auto_zgate_edge_tunnel_build_bot/
    ```
 2. **必填**：於 `.env` 設定 `TELEGRAM_TOKEN`（BotFather 取得）。
 3. **選填**：
+   - `TELEGRAM_BOT_NAME`：機器人名稱（僅供顯示）。
    - `SDK_BUILDER_ROOT`、`TUNNEL_BUILDER_ROOT`：兩 builder 專案路徑（預設為本專案同層目錄）。
    - `ZGATE_SDK_BUILDER_OUTPUT`：zgate-sdk-c 產出目錄（供 tunnel builder 依賴）。
    - `VCPKG_ROOT`：vcpkg 根目錄（傳入 builder）。
-   - `SUDO_PASS`：非互動建置用 sudo 密碼（**僅建議於測試環境使用；勿將 .env 提交版控**）。
+   - `SUDO_PASS`：非互動建置用 sudo 密碼（安裝時可一併設定；**勿將 .env 提交版控**）。
 4. **systemd**：若專案或使用者路徑非預設，請編輯 `systemd/*.service` 與 `systemd/*.timer` 內之路徑與 `User=`。
 
 ---
@@ -94,7 +122,7 @@ auto_zgate_edge_tunnel_build_bot/
 | 指令 | 說明 |
 |------|------|
 | `/version`、`/latest` | 查詢 OpenZiti tunnel 目前最新版本、上次建置版本與時間、Linux/Windows 二進位是否存在。 |
-| `/build`、`/build_now` | 手動觸發建置。Bot 會先請您選擇**建置平台**（回覆 `all` / `linux` / `windows` / `macos`），再詢問 **sudo 密碼**（可回覆「跳過」或「無」略過）。若本機尚無兩 builder 專案會先從 GitHub 下載並回報結果。建置過程中每步驟推送到此對話；完成後自動打包 tar.gz 並上傳，可從對話下載。 |
+| `/build` | 手動觸發建置。Bot 會請您選擇**建置平台**（回覆 `all` / `linux` / `windows` / `macos`）後直接開始建置；sudo 使用安裝時寫入 `.env` 的 `SUDO_PASS`（若有）。若本機尚無兩 builder 專案會先從 GitHub 下載並回報結果。建置過程中每步驟推送到此對話；完成後自動打包 tar.gz 並上傳，可從對話下載。 |
 | `/status` | 目前狀態：最新版、上次建置版本、是否建置中、Linux/Windows 產出是否存在，以及 `latest_version/` 目錄樹。 |
 | `/clean_sdk` | 刪除 **zgate-sdk-c-builder** 的 `output` 與 `work` 目錄。 |
 | `/clean_tunnel` | 刪除 **zgate-tunnel-sdk-c-builder** 的 `output` 與 `work` 目錄。 |
@@ -124,7 +152,9 @@ auto_zgate_edge_tunnel_build_bot/
 
 ---
 
-## systemd 部署（建議）
+## systemd 部署（手動安裝時）
+
+若未使用 `install.sh` 一鍵安裝，可手動部署：
 
 1. **複製 unit 檔**（請依實際路徑與使用者修改 unit 內容）：
    ```bash
@@ -133,6 +163,7 @@ auto_zgate_edge_tunnel_build_bot/
             systemd/auto_zgate_edge_tunnel_build_bot_telegram.service \
             /etc/systemd/system/
    ```
+   並編輯上述檔案，將 `/home/zgate/auto_zgate_edge_tunnel_build_bot` 改為實際安裝路徑、`User=zgate` 改為實際執行使用者。
 2. **重新載入並啟用**：
    ```bash
    sudo systemctl daemon-reload

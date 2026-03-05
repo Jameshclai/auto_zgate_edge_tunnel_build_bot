@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Telegram bot for zgate-edge-tunnel build bot.
-Commands: /version, /latest, /build, /build_now, /status, /clean_sdk, /clean_tunnel, /clean_all.
+Commands: /version, /latest, /build, /status, /clean_sdk, /clean_tunnel, /clean_all.
 Token from .env TELEGRAM_TOKEN or env TELEGRAM_TOKEN.
 
 Copyright (c) eCloudseal Inc.  All rights reserved.  Author: Lai Hou Chang (James Lai)
@@ -97,32 +97,12 @@ def _write_await_sudo(data):
     AWAIT_SUDO_JSON.write_text(json.dumps(data, ensure_ascii=False))
 
 
-def _get_await_sudo_chat(chat_id):
-    """回傳 'ok'=未過期、'expired'=已過期並已清除、'no'=未在等候。"""
-    from datetime import datetime, timezone
-    data = _read_await_sudo()
-    entry = data.get(str(chat_id))
-    if not entry or entry.get("awaiting") != "sudo":
-        return "no"
-    since = entry.get("since", "")
-    try:
-        dt = datetime.fromisoformat(since.replace("Z", "+00:00"))
-        now = datetime.now(timezone.utc)
-        if (now - dt).total_seconds() > AWAIT_SUDO_EXPIRE_SEC:
-            data.pop(str(chat_id), None)
-            _write_await_sudo(data)
-            return "expired"
-    except Exception:
-        pass
-    return "ok"
-
-
 def _get_await_entry(chat_id):
     """回傳 (entry_dict 或 None, 'ok'|'expired'|'no')。entry 可能為 awaiting 'platform'、'sudo' 或 'clean_all'，且可有 'platform' 鍵。"""
     from datetime import datetime, timezone
     data = _read_await_sudo()
     entry = data.get(str(chat_id))
-    if not entry or entry.get("awaiting") not in ("platform", "sudo", "clean_all"):
+    if not entry or entry.get("awaiting") not in ("platform", "clean_all"):
         return None, "no"
     since = entry.get("since", "")
     try:
@@ -186,15 +166,13 @@ def handle_version(chat_id):
     send_message(chat_id, msg)
 
 
-def _start_build_with_sudo(chat_id, sudo_pass, platform="all"):
-    """實際啟動建置，傳入 BUILD_CHAT_ID、SUDO_PASS、BUILD_PLATFORM（all/linux/windows/macos）。"""
+def _start_build(chat_id, platform="all"):
+    """實際啟動建置，傳入 BUILD_CHAT_ID、BUILD_PLATFORM；SUDO_PASS 由 .env 提供（安裝時設定）。"""
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     LOCK_FILE.touch()
     script = BIN_DIR / "run_build.sh"
     log = STATE_DIR / "build.log"
     env = {**os.environ, "BUILD_CHAT_ID": str(chat_id), "BUILD_PLATFORM": str(platform)}
-    if sudo_pass is not None:
-        env["SUDO_PASS"] = str(sudo_pass)
     with open(log, "a") as f:
         subprocess.Popen(
             [str(script)],
@@ -217,7 +195,7 @@ def handle_build(chat_id):
         send_message(chat_id, "建置進行中，請稍後再試。")
         return
     from datetime import datetime, timezone
-    # 先詢問建置平台；使用者回覆 all/linux/windows/macos 後再詢問 sudo，再啟動建置
+    # 僅詢問建置平台；使用者回覆 all/linux/windows/macos 後直接啟動建置（sudo 由 .env SUDO_PASS 提供）
     _write_await_sudo({
         **(_read_await_sudo()),
         str(chat_id): {"awaiting": "platform", "since": datetime.now(timezone.utc).isoformat()},
@@ -407,7 +385,8 @@ def handle_status(chat_id):
 
 
 def main():
-    print("Bot starting. 請在 Telegram 開啟: https://t.me/ZGate_Tunnel_AutoBot 並傳送 /start", file=sys.stderr, flush=True)
+    bot_name = os.environ.get("TELEGRAM_BOT_NAME", "您的 Bot").strip() or "您的 Bot"
+    print(f"Bot starting. 請在 Telegram 搜尋並開啟您的機器人「{bot_name}」後傳送 /start", file=sys.stderr, flush=True)
     offset = 0
     while True:
         try:
@@ -429,7 +408,7 @@ def main():
             try:
                 if text in ("/version", "/latest"):
                     handle_version(chat_id)
-                elif text in ("/build", "/build_now"):
+                elif text == "/build":
                     handle_build(chat_id)
                 elif text == "/status":
                     handle_status(chat_id)
@@ -444,7 +423,7 @@ def main():
                         chat_id,
                         "指令：\n"
                         "/version 或 /latest — 查詢最新版本與上次建置\n"
-                        "/build 或 /build_now — 手動觸發建置（會先詢問平台：all/linux/windows/macos，再詢問 sudo 密碼）\n"
+                        "/build — 手動觸發建置（會先詢問平台：all/linux/windows/macos；sudo 使用安裝時設定的 .env）\n"
                         "/status — 目前狀態\n"
                         "/clean_sdk — 刪除 zgate-sdk-c-builder 的 output 與 work\n"
                         "/clean_tunnel — 刪除 zgate-tunnel-sdk-c-builder 的 output 與 work\n"
@@ -460,21 +439,11 @@ def main():
                             if plat not in ("all", "linux", "windows", "macos"):
                                 send_message(chat_id, "請輸入 all、linux、windows 或 macos 其中一項。")
                             else:
-                                from datetime import datetime, timezone
-                                _write_await_sudo({
-                                    **(_read_await_sudo()),
-                                    str(chat_id): {
-                                        "awaiting": "sudo",
-                                        "since": datetime.now(timezone.utc).isoformat(),
-                                        "platform": plat,
-                                    },
-                                })
-                                send_message(
-                                    chat_id,
-                                    "建置可能需要 sudo 權限。\n"
-                                    "請「回覆此訊息」輸入 sudo 密碼（或回覆「跳過」/「無」略過）。\n"
-                                    "（約 5 分鐘內未回覆將取消）",
-                                )
+                                _clear_await_sudo(chat_id)
+                                if LOCK_FILE.exists() and _is_build_really_running():
+                                    send_message(chat_id, "建置進行中，請稍後再試。")
+                                else:
+                                    _start_build(chat_id, platform=plat)
                         elif entry.get("awaiting") == "clean_all":
                             # 使用者回覆 clean_all 確認
                             reply = (text or "").strip().lower()
@@ -501,17 +470,9 @@ def main():
                                     str(chat_id): {"awaiting": "clean_all", "since": datetime.now(timezone.utc).isoformat()},
                                 })
                         else:
-                            # 使用者回覆 sudo 密碼（或 跳過/無）
+                            # 其他 awaiting 狀態（保留擴充用）
                             _clear_await_sudo(chat_id)
-                            platform = entry.get("platform", "all")
-                            if not text or text.strip().lower() in ("跳過", "無", "skip", "no", "n"):
-                                sudo_pass = ""
-                            else:
-                                sudo_pass = text
-                            if LOCK_FILE.exists() and _is_build_really_running():
-                                send_message(chat_id, "建置進行中，請稍後再試。")
-                            else:
-                                _start_build_with_sudo(chat_id, sudo_pass if sudo_pass else None, platform=platform)
+                            send_message(chat_id, "不認識的回覆，請重新發送指令。")
                     else:
                         send_message(chat_id, "不認識的指令，請輸入 /help 查看。")
             except Exception as e:
