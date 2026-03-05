@@ -47,7 +47,7 @@ auto_zgate_edge_tunnel_build_bot/
 ├── .env                    # 設定（TELEGRAM_TOKEN、路徑等）；勿提交版控；一鍵安裝時由 install.sh 互動寫入
 ├── .env.example
 ├── install.sh              # 一鍵安裝腳本（Ubuntu 24.04）：互動輸入 Token／sudo 密碼後安裝服務
-├── uninstall.sh            # 反安裝腳本：停止並移除 systemd 服務；可選 --remove-data 清除 state/.env
+├── uninstall.sh            # 反安裝腳本：停止並移除 systemd 服務；可選 --all 清除 state/.env
 ├── .gitignore
 ├── COPYRIGHT               # 版權與法律聲明（eCloudseal Inc.）
 ├── README.md
@@ -92,8 +92,8 @@ sudo ./install.sh
 執行反安裝腳本可停止並移除 systemd 服務與 unit 檔；可選清除本機資料（state、建置產物、.env）。
 
 ```bash
-sudo ./uninstall.sh              # 僅移除服務，保留專案目錄與 state/.env（可再 install）
-sudo ./uninstall.sh --remove-data # 並刪除 state/、latest_version/、.env（不留建置產物與機密）
+sudo ./uninstall.sh        # 僅移除服務，保留專案目錄與 state/.env（可再 install）
+sudo ./uninstall.sh --all  # 並刪除 state/、latest_version/、.env（不留建置產物與機密）
 ```
 
 專案目錄不會被刪除；若要完全移除請手動 `rm -rf` 該目錄。

@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
 # Uninstall auto_zgate_edge_tunnel_build_bot: stop/disable systemd services, remove unit files.
-# Optional: --remove-data to delete state/, latest_version/, .env (no default secrets left).
+# Optional: --all to delete state/, latest_version/, .env (no default secrets left).
 # Copyright (c) eCloudseal Inc.  All rights reserved.  Author: Lai Hou Chang (James Lai)
 set -euo pipefail
 
 INSTALL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REMOVE_DATA=0
+REMOVE_ALL=0
 for arg in "$@"; do
-    if [[ "$arg" == "--remove-data" ]]; then
-        REMOVE_DATA=1
+    if [[ "$arg" == "--all" ]]; then
+        REMOVE_ALL=1
         break
     fi
 done
 
 if [[ "$(id -u)" -ne 0 ]]; then
-    echo "請使用 sudo 執行此反安裝腳本，例如: sudo ./uninstall.sh"
+    echo "請使用 sudo 執行此反安裝腳本，例如: sudo ./uninstall.sh 或 sudo ./uninstall.sh --all"
     exit 1
 fi
 
@@ -42,7 +42,7 @@ echo ">>> 重新載入 systemd..."
 systemctl daemon-reload
 
 # Optional: remove state, latest_version, .env
-if [[ "$REMOVE_DATA" -eq 1 ]]; then
+if [[ "$REMOVE_ALL" -eq 1 ]]; then
     echo ">>> 移除本機資料 (state/, latest_version/, .env)..."
     [[ -d "${INSTALL_DIR}/state" ]]       && rm -rf "${INSTALL_DIR}/state"       && echo "  已刪除 state/"
     [[ -d "${INSTALL_DIR}/latest_version" ]] && rm -rf "${INSTALL_DIR}/latest_version" && echo "  已刪除 latest_version/"
@@ -52,7 +52,7 @@ fi
 echo ""
 echo "=== 反安裝完成 ==="
 echo "systemd 服務與 unit 已移除。"
-if [[ "$REMOVE_DATA" -eq 1 ]]; then
+if [[ "$REMOVE_ALL" -eq 1 ]]; then
     echo "本機資料 (state、latest_version、.env) 已刪除。"
 fi
 echo "專案目錄保留: ${INSTALL_DIR}"
